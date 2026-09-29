@@ -20,9 +20,38 @@ It brings together the reactive, lightweight architecture of Quarkus (Undertow H
 
 == Getting Started
 
-=== Development Mode (Live Coding)
+=== Development Reload Strategies
 
-To run the application with Quarkus dev mode and live reload enabled:
+`kriolos-opos-webforj-quarkus` supports two complementary reload strategies during local development:
+
+[cols="25%,35%,40%",options="header"]
+|===
+| Strategy | Quarkus Dev Mode (`quarkus:dev`) | webforJ Native Hotswap (`HotswapAgent`)
+
+| **Mechanism**
+| Quarkus `RestartClassLoader` re-creation on code changes.
+| In-place JVM bytecode redefinition (`java.lang.instrument`).
+
+| **Container State**
+| Container & CDI beans are recycled; browser page reloads.
+| Container remains running continuously; **zero server restart**.
+
+| **Session & UI State**
+| Browser page refreshes; temporary input states reset.
+| **100% Preserved**: DOM component tree updates live over WebSocket; form inputs & session stay intact.
+
+| **Best Used For**
+| Core backend logic, CDI bean architecture, security rules.
+| Rapid UI/UX iteration, component layout styling, deep interactive workflows.
+
+| **Prerequisites**
+| Standard JDK 21+.
+| JetBrains Runtime 21 (or OpenJDK with DCEVM) + `webforj-maven-plugin`.
+|===
+
+=== 1. Standard Quarkus Dev Mode
+
+To run with standard Quarkus dev mode and live coding:
 
 [source,bash]
 ----
@@ -33,8 +62,125 @@ Once launched, access the application at:
 * **Application**: http://localhost:8080
 * **Quarkus Dev UI**: http://localhost:8080/q/dev/
 
-=== Live Coding & Hot Reload
-With `quarkus-webforj`, Quarkus monitors your Java source files and webforJ components. Simply edit code in your IDE, save the changes, and refresh the browser—Quarkus automatically compiles and updates classes on the fly without requiring server restarts or external hotswap agents.
+When you modify Java classes, Quarkus recompiles them and replaces the `RestartClassLoader`. Ensure `quarkus.class-loading.parent-first-artifacts=com.webforj:webforj-foundation` is configured in `src/main/resources/application.properties` (enabled by default).
+
+=== Deep Dive: Classloading Architecture & Strategies for Dev Mode
+
+In Quarkus dev mode, application classes live in the ephemeral `RestartClassLoader`, which is destroyed and recreated whenever source files change. Understanding how webforJ integrates with this mechanism is crucial:
+
+==== The Core Challenge
+In webforJ, `Bootstrap.initApplication` resolves the application entry point using the caller-sensitive `Class.forName(selectedClassName)`:
+[source,java]
+----
+App app = ConceiverProvider.getCurrent()
+    .getApplication((Class<? extends App>) Class.forName(selectedClassName));
+----
+Because 1-arg `Class.forName` uses the caller's classloader (`Bootstrap.class.getClassLoader()`), webforJ must be able to resolve application classes living inside Quarkus's `RestartClassLoader`.
+
+Three architectural strategies were evaluated to solve this:
+
+[cols="20%,40%,40%",options="header"]
+|===
+| Strategy | Implementation | Trade-offs & Findings
+
+| **1. Bytecode Transformation (ASM Patch via Extension) [ACTIVE & TESTED]**
+| Uses Quarkus's `BytecodeTransformerBuildItem` in `WebforjProcessor` to rewrite `com.webforj.Bootstrap` bytecode at build time, replacing `Class.forName(name)` with `Class.forName(name, true, Thread.currentThread().getContextClassLoader())`.
+| *Why it works*: **Zero configuration in user applications**. Keeps all third-party webforJ, BBj, and Undertow libraries unified in the `BaseClassLoader` (preventing any classloader splitting or linkage breakage), while enabling `Bootstrap` to resolve user application classes from Quarkus's ephemeral `RestartClassLoader` across all live reloads.
+
+| **2. Reloadable Classpath (`reloadable-artifacts`)**
+| Setting `quarkus.class-loading.reloadable-artifacts=com.webforj:webforj-foundation` moves the framework jar into Quarkus's child `RestartClassLoader`.
+| *Why it fails*: Quarkus extension runtime jars (`quarkus-webforj`) reside in `BaseClassLoader`. Extension CDI beans like `QuarkusRouteSecurityContext` implement `RouteSecurityContext` from `webforj-foundation`. Because Java classloader delegation is child &rarr; parent, `BaseClassLoader` cannot access classes in `RestartClassLoader`, throwing `NoClassDefFoundError: com/webforj/router/security/RouteSecurityContext`.
+
+| **3. Parent-First Classpath (`parent-first-artifacts`)**
+| Setting `quarkus.class-loading.parent-first-artifacts=com.webforj:webforj-foundation` in `application.properties`.
+| *Why it fails*: Isolates `webforj-foundation` in the parent classloader while `webforj-engine` and its BBj dependencies remain in the child classloader. During session bootstrap, `com.webforj.Environment` fails to link `com.basis.startup.type.BBjException`, throwing `NoClassDefFoundError: com/basis/startup/type/BBjException` and causing a blank page. Adding all transitive dependencies cascades into `ConfigException` linkage conflicts.
+|===
+
+=== 2. webforJ Native Hotswap (In-Place UI Updates)
+
+Starting in webforJ 26.02, webforJ integrates native support for open-source **HotswapAgent** running on **JetBrains Runtime (JBR)** or DCEVM. When you edit and compile a webforJ view or component, changes are redefined in-place and pushed to the browser over WebSocket without restarting the server or reloading the page.
+
+==== A. Prerequisites: JetBrains Runtime (JBR)
+HotswapAgent performs advanced structural redefinitions (adding methods, fields, annotations) when running on a JVM that supports enhanced class redefinition:
+
+* **JetBrains Runtime 21**:
+  * Via SDKMAN:
++
+[source,bash]
+----
+sdk install java 21.0.6-jbr
+sdk use java 21.0.6-jbr
+----
+  * Or download directly from link:https://github.com/JetBrains/JetBrainsRuntime[JetBrains Runtime releases].
+
+==== B. Project Configuration
+The project is pre-configured for Hotswap out-of-the-box:
+
+1. **`src/main/resources/application.properties`**:
++
+[source,properties]
+----
+# Enable webforJ devtools WebSocket live reload server
+webforj.devtools.livereload.enabled=true
+webforj.devtools.livereload.static-resources-enabled=true
+----
+
+2. **`pom.xml` (`webforj-maven-plugin`)**:
++
+[source,xml]
+----
+<plugin>
+    <groupId>com.webforj</groupId>
+    <artifactId>webforj-maven-plugin</artifactId>
+    <version>${webforj.version}</version>
+    <extensions>true</extensions>
+    <configuration>
+        <hotswap>
+            <hotswapAgent />
+        </hotswap>
+    </configuration>
+</plugin>
+----
+
+3. **Dev Profile Dependency**:
+`com.webforj:webforj-devtools` is automatically included via the default active Maven profile (`<profile id="dev">`).
+
+==== C. Running with Hotswap
+
+You can run Hotswap through either of the following approaches:
+
+* **Option 1: Using `webforj-maven-plugin` (Recommended)**:
++
+[source,bash]
+----
+./mvnw webforj:watch quarkus:dev
+----
++
+On the first execution, `webforj-maven-plugin` automatically downloads and caches `hotswap-agent.jar`, attaches the `webforj-hotswap-observer.jar` agent, binds the reload WebSocket on port `35730`, and starts the Quarkus application.
+
+* **Option 2: Using Direct JVM Arguments**:
++
+[source,bash]
+----
+./mvnw quarkus:dev -Djvm.args="-XX:+AllowEnhancedClassRedefinition -javaagent:${HOME}/.m2/repository/com/webforj/webforj-hotswap-observer/26.02/webforj-hotswap-observer-26.02.jar -javaagent:${HOME}/.m2/repository/org/hotswapagent/hotswap-agent/1.4.2/hotswap-agent-1.4.2.jar"
+----
+
+==== D. Verifying Hotswap in Console Logs
+When the server starts with Hotswap active, you will observe the following confirmation logs:
+
+[source,text]
+----
+[INFO] Registered webforJ devtools WatchContextListener for live reload in dev mode.
+[INFO] HotswapAgent detected, registered for class redefinition events
+[INFO] webforJ live reload ready on port 35730
+----
+
+==== E. Developer Workflow
+1. Open http://localhost:8080 in your browser and log in.
+2. Navigate to any screen or begin entering data in a form.
+3. In your IDE, modify any UI component (such as text labels, layouts, button colors, or event listeners in `Application.java` or components).
+4. Save the file. Your IDE or Maven compiles the class.
+5. **Instant In-Place Update**: The UI component instantly reconstructs in the browser without reloading the page, preserving all current form inputs and user session state!
 
 == Security & Default Accounts
 

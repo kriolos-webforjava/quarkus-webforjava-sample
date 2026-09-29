@@ -94,6 +94,10 @@
             <groupId>com.webforj</groupId>
             <artifactId>webforj</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.webforj</groupId>
+            <artifactId>webforj-foundation</artifactId>
+        </dependency>
         
         <!-- Quarkus Extension -->
         <dependency>
@@ -233,13 +237,11 @@
                         </goals>
                     </execution>
                 </executions>
-                <!--
-            <configuration>
-                <hotswap>
-                    <hotswapAgent />
-                </hotswap>
-            </configuration>
-                -->
+                <configuration>
+                    <hotswap>
+                        <hotswapAgent />
+                    </hotswap>
+                </configuration>
             </plugin>
 
             <!-- Runs the integration tests (*IT) after the server is started -->
