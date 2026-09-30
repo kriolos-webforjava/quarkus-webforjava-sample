@@ -25,7 +25,7 @@ import io.quarkus.security.identity.request.UsernamePasswordAuthenticationReques
 import jakarta.inject.Inject;
 
 @Route("/login")
-@FrameTitle("Login Submission")
+@FrameTitle("KriolOS POS ⚡ Live Reload Active")
 @AnonymousAccess
 public class LoginView extends Composite<Div> implements DidEnterObserver {
 
@@ -43,6 +43,9 @@ public class LoginView extends Composite<Div> implements DidEnterObserver {
 
     public LoginView() {
         login.onSubmit(this::performLogin);
+        com.webforj.component.login.LoginI18n i18n = login.getI18n();
+        i18n.setTitle("KriolOS POS ⚡ Live Reload Active");
+        login.setI18n(i18n);
         self.add(login);
     }
 

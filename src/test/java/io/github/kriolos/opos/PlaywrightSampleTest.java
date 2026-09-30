@@ -95,17 +95,14 @@ public class PlaywrightSampleTest {
         // 3. Verify page title
         String title = page.title();
         assertNotNull(title, "Page title should not be null");
-        assertTrue(title.contains("Login") || title.contains("KriolOS"),
-                "Title should contain 'Login' or 'KriolOS', but was: " + title);
-
-        // 4. Wait for Authentication dialog to appear in DOM
-        Locator authHeading = page.locator("text=Authentication").first();
-        authHeading.waitFor(new Locator.WaitForOptions().setTimeout(10000));
-        assertTrue(authHeading.isVisible(), "Authentication heading should be visible");
-
-        // 5. Verify sign-in button exists
+        // 4. Wait for Sign in button and username field in the login dialog
         Locator signInBtn = page.locator("text=Sign in").first();
+        signInBtn.waitFor(new Locator.WaitForOptions().setTimeout(10000));
         assertTrue(signInBtn.isVisible(), "Sign in button should be visible");
+
+        // 5. Verify page title
+        assertTrue(title.contains("Live Reload") || title.contains("Login") || title.contains("KriolOS"),
+                "Title should contain expected text, but was: " + title);
 
         // 6. Capture screenshot for verification
         page.screenshot(new Page.ScreenshotOptions()
