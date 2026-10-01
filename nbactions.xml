@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<actions>
+        <action>
+            <actionName>CUSTOM-webfor:watch quarkus:dev</actionName>
+            <displayName>webforj:watch quarkus:dev</displayName>
+            <goals>
+                <goal>webforj:watch</goal>
+                <goal>quarkus:dev</goal>
+            </goals>
+        </action>
+    </actions>

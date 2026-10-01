@@ -16,6 +16,6 @@ public class DashboardView extends Composite<FlexLayout> {
   public DashboardView() {
     self.setHeight("100%");
     self.setAlignment(FlexAlignment.CENTER);
-    self.add(new Explore("Your dashboard is empty", "layout-dashboard", "Create widget"));
+    self.add(new Explore("Welcome to KriolOS POS Dashboard!", "layout-dashboard", "Explore POS Features"));
   }
 }

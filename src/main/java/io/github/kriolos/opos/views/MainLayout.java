@@ -9,8 +9,6 @@ import io.github.kriolos.opos.components.DrawerHeader;
 import io.github.kriolos.opos.components.ThemeToggle;
 import io.github.kriolos.opos.components.UserBadge;
 import io.quarkiverse.webforj.runtime.security.QuarkusRouteSecurityContext;
-import io.quarkus.arc.Arc;
-import io.quarkus.arc.InstanceHandle;
 
 import com.webforj.component.Component;
 import com.webforj.component.Composite;
@@ -41,31 +39,13 @@ public class MainLayout extends Composite<AppLayout> {
   QuarkusRouteSecurityContext securityContext;
 
   public MainLayout() {
-    this(resolveSecurityContext());
-  }
-
-  @Inject
-  public MainLayout(QuarkusRouteSecurityContext securityContext) {
     this.securityContext = securityContext;
     setHeader();
     setDrawer();
     setDrawerFooter();
     navigateRegistration = Router.getCurrent().onNavigate(this::onNavigate);
   }
-
-  private static QuarkusRouteSecurityContext resolveSecurityContext() {
-    try {
-      if (Arc.container() != null) {
-        InstanceHandle<QuarkusRouteSecurityContext> handle =
-            Arc.container().instance(QuarkusRouteSecurityContext.class);
-        if (handle.isAvailable()) {
-          return handle.get();
-        }
-      }
-    } catch (Throwable ignored) {
-    }
-    return null;
-  }
+  
 
   @PostConstruct
   public void onInit() {
